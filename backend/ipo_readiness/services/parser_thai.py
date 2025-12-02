@@ -1,0 +1,258 @@
+from __future__ import annotations
+
+import os
+from io import BytesIO
+from typing import Dict, List, Optional, Tuple
+
+import xlrd
+from openpyxl import Workbook, load_workbook
+
+YEARS = [2563, 2564, 2565, 2566, 2567]
+
+STANDARD_LAYOUT = {
+    "ratio": {
+        "columns": ["B", "C", "D", "E", "F", "G"],
+        "rows": {
+            "roa": 7,
+            "roe": 8,
+            "current_ratio": 12,
+            "debt_to_equity": 22,
+            "debt_to_assets": 23,
+            "gross_profit_margin_pct": 9,  # rarely present but captured if exists
+        },
+    },
+    "income": {
+        "columns": ["B", "D", "F", "H", "J"],
+        "rows": {
+            "total_revenue": 7,
+            "gross_profit": 9,
+            "net_profit": 14,
+        },
+    },
+    "balance": {
+        "columns": ["B", "D", "F", "H", "J"],
+        "rows": {
+            "total_assets": 11,
+            "total_liabilities": 14,
+            "shareholders_equity": 15,
+        },
+    },
+}
+
+LEGACY_LAYOUT = {
+    "ratio": {
+        "columns": ["C", "D", "E", "F", "G"],
+        "rows": {
+            "roa": 6,
+            "roe": 7,
+            "gross_profit_margin_pct": 8,
+            "net_profit_margin_pct": 9,
+            "current_ratio": 11,
+            "debt_to_assets": 16,
+            "debt_to_equity": 18,
+        },
+    },
+    "income": {
+        "columns": ["C", "E", "G", "I", "K"],
+        "rows": {
+            "total_revenue": 6,
+            "net_profit": 12,
+        },
+    },
+    "balance": {
+        "columns": ["C", "E", "G", "I", "K"],
+        "rows": {
+            "total_assets": 9,
+            "shareholders_equity": 13,
+        },
+    },
+}
+
+LAYOUTS = {
+    "standard": STANDARD_LAYOUT,
+    "legacy": LEGACY_LAYOUT,
+}
+
+
+def parse_financial_files(workbooks):
+    files = workbooks if isinstance(workbooks, list) else [workbooks]
+    aggregated = {
+        "years": YEARS,
+        "balance_sheet": {},
+        "income_statement": {},
+        "ratios": {},
+    }
+    for file in files:
+        workbook, layout_key = _load_workbook_from_upload(file)
+        extracted = _extract_from_workbook(workbook, layout_key)
+        _merge_sections(aggregated["balance_sheet"], extracted["balance_sheet"])
+        _merge_sections(aggregated["income_statement"], extracted["income_statement"])
+        _merge_sections(aggregated["ratios"], extracted["ratios"])
+    return aggregated
+
+
+def _extract_from_workbook(workbook, layout_key: str) -> Dict[str, Dict[str, Dict[int, float]]]:
+    layout = LAYOUTS.get(layout_key, STANDARD_LAYOUT)
+    sections = {
+        "balance_sheet": {},
+        "income_statement": {},
+        "ratios": {},
+    }
+    for sheet in workbook.worksheets:
+        sheet_type = _detect_sheet_type(sheet)
+        if not sheet_type:
+            continue
+        config = layout.get(sheet_type)
+        if not config:
+            continue
+        extracted = _extract_by_cells(sheet, config["rows"], config["columns"])
+        if sheet_type == "ratio":
+            sections["ratios"] = extracted
+        elif sheet_type == "income":
+            sections["income_statement"] = extracted
+        elif sheet_type == "balance":
+            sections["balance_sheet"] = extracted
+    _fill_derived_values(sections)
+    return sections
+
+
+def _merge_sections(target: Dict[str, Dict[int, float]], source: Dict[str, Dict[int, float]]) -> None:
+    for key, series in source.items():
+        existing = target.setdefault(key, {})
+        existing.update(series)
+
+
+def _detect_sheet_type(sheet) -> Optional[str]:
+    keywords = []
+    for row in sheet.iter_rows(min_row=1, max_row=8, max_col=4):
+        for cell in row:
+            if cell.value:
+                keywords.append(str(cell.value).lower())
+    text = " ".join(keywords)
+    if "อัตราส่วน" in text or "ratio" in text:
+        return "ratio"
+    if "กำไร" in text or "income" in text or "profit" in text:
+        return "income"
+    if "ฐานะ" in text or "balance" in text or "สินทรัพย์รวม" in text:
+        return "balance"
+    # fallback based on sheet name
+    name = sheet.title.lower()
+    if any(word in name for word in ["ratio", "อัตราส่วน"]):
+        return "ratio"
+    if any(word in name for word in ["income", "profit", "กำไร"]):
+        return "income"
+    if any(word in name for word in ["balance", "สินทรัพย์", "ฐานะ"]):
+        return "balance"
+    return None
+
+
+def _extract_by_cells(sheet, rows_map: Dict[str, int], columns: List[str]) -> Dict[str, Dict[int, float]]:
+    data: Dict[str, Dict[int, float]] = {}
+    for key, row in rows_map.items():
+        data[key] = {}
+        for col, year in zip(columns, YEARS):
+            cell_value = sheet[f"{col}{row}"].value
+            value = _coerce_number(cell_value)
+            if value is not None:
+                data[key][year] = value
+    return data
+
+
+def _coerce_number(value) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        cleaned = str(value).replace(",", "")
+        return float(cleaned)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fill_derived_values(sections: Dict[str, Dict[str, Dict[int, float]]]) -> None:
+    _derive_gross_profit(sections)
+    _derive_total_liabilities(sections)
+
+
+def _derive_gross_profit(sections: Dict[str, Dict[str, Dict[int, float]]]) -> None:
+    income = sections["income_statement"]
+    if income.get("gross_profit"):
+        return
+    revenue = income.get("total_revenue", {})
+    ratios = sections["ratios"].get("gross_profit_margin_pct", {})
+    derived: Dict[int, float] = {}
+    for year, rev in revenue.items():
+        margin = ratios.get(year)
+        if margin is None:
+            continue
+        derived[year] = rev * (margin / 100.0)
+    if derived:
+        income["gross_profit"] = derived
+
+
+def _derive_total_liabilities(sections: Dict[str, Dict[str, Dict[int, float]]]) -> None:
+    balance = sections["balance_sheet"]
+    if balance.get("total_liabilities"):
+        return
+    assets = balance.get("total_assets", {})
+    equity = balance.get("shareholders_equity", {})
+    derived: Dict[int, float] = {}
+    for year, asset in assets.items():
+        eq = equity.get(year)
+        if eq is None:
+            continue
+        derived_value = asset - eq
+        derived[year] = derived_value
+    if derived:
+        balance["total_liabilities"] = derived
+
+
+def _load_workbook_from_upload(file_obj) -> Tuple[Workbook, str]:
+    filename = getattr(file_obj, "filename", "") or getattr(file_obj, "name", "")
+    extension = os.path.splitext(filename.lower())[1]
+    raw_bytes = _read_upload_bytes(file_obj)
+    if extension == ".xls":
+        return _convert_xls_to_openpyxl(raw_bytes), "legacy"
+    return load_workbook(BytesIO(raw_bytes), data_only=True), "standard"
+
+
+def _read_upload_bytes(file_obj) -> bytes:
+    stream = getattr(file_obj, "stream", file_obj)
+    if hasattr(stream, "seek"):
+        stream.seek(0)
+    data = stream.read()
+    if hasattr(stream, "seek"):
+        stream.seek(0)
+    return data
+
+
+def _convert_xls_to_openpyxl(raw_bytes: bytes) -> Workbook:
+    book = xlrd.open_workbook(file_contents=raw_bytes)
+    workbook = Workbook()
+    active = workbook.active
+    if book.nsheets == 0:
+        active.title = "Sheet1"
+        return workbook
+
+    first_sheet = book.sheet_by_index(0)
+    active.title = _safe_sheet_title(first_sheet.name)
+    _copy_xlrd_sheet(first_sheet, active)
+
+    for index in range(1, book.nsheets):
+        source = book.sheet_by_index(index)
+        target = workbook.create_sheet(title=_safe_sheet_title(source.name))
+        _copy_xlrd_sheet(source, target)
+    return workbook
+
+
+def _copy_xlrd_sheet(source_sheet, target_sheet) -> None:
+    for row in range(source_sheet.nrows):
+        for col in range(source_sheet.ncols):
+            target_sheet.cell(row=row + 1, column=col + 1, value=source_sheet.cell_value(row, col))
+
+
+def _safe_sheet_title(title: str) -> str:
+    base = title or "Sheet"
+    cleaned = base.replace("/", "-")
+    return cleaned[:31]

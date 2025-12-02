@@ -1,0 +1,14 @@
+{
+  "name": "ipo-readiness",
+  "version": "1.0.0",
+  "description": "IPO Readiness Assessment System",
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && python app.py",
+    "install:frontend": "cd frontend && npm install",
+    "build:frontend": "cd frontend && npm run build"
+  },
+  "private": true
+}
+
+

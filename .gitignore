@@ -1,0 +1,15 @@
+# Node and frontend build artefacts
+node_modules/
+*.log
+frontend/dist/
+
+# Python virtual environments
+venv/
+backend/venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# App specific data
+backend/users.db
