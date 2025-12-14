@@ -4,6 +4,7 @@ import "./App.css";
 import Home from "./components/Home";
 import AssessmentUpload from "./components/Assessment";
 import AssessmentReport from "./components/AssessmentReport";
+import ProgressReport from "./components/ProgressReport";
 import AuditLogs from "./components/AuditLogs";
 import DocumentChecklist from "./components/DocumentChecklist";
 
@@ -12,7 +13,7 @@ function App() {
   const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(false);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState("login");
@@ -81,7 +82,14 @@ function App() {
         throw new Error(data.error || "เข้าสู่ระบบไม่สำเร็จ");
       }
       setCurrentUser(data.user);
-      window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
+      if (remember) {
+        window.localStorage.setItem(
+          USER_STORAGE_KEY,
+          JSON.stringify({ user: data.user, remember: true })
+        );
+      } else {
+        window.localStorage.removeItem(USER_STORAGE_KEY);
+      }
       setView("home");
       setStatus(`ยินดีต้อนรับ ${data.user.name}`);
 
@@ -160,15 +168,24 @@ function App() {
   }, [view, isAdminRole]);
   useEffect(() => {
     const storedUser = window.localStorage.getItem(USER_STORAGE_KEY);
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser);
-        setCurrentUser(parsed);
+    if (!storedUser) return;
+
+    try {
+      const parsed = JSON.parse(storedUser);
+      const userData = parsed?.user || parsed;
+      const shouldRestore = parsed?.remember === true;
+
+      if (shouldRestore && userData?.id) {
+        setCurrentUser(userData);
+        setRemember(true);
         setView("home");
-        setStatus(`ยินดีต้อนรับกลับ ${parsed.name}`);
-      } catch (error) {
+        setStatus(`ยินดีต้อนรับกลับ ${userData.name}`);
+      } else {
+        // Clean up old/invalid cached sessions so the app drops to the login screen
         window.localStorage.removeItem(USER_STORAGE_KEY);
       }
+    } catch (error) {
+      window.localStorage.removeItem(USER_STORAGE_KEY);
     }
   }, []);
 
@@ -522,31 +539,106 @@ function App() {
 
   return (
     <div className="dashboard-shell">
-      <header className="dashboard-header">
-        <div className="dashboard-brand">
-          <img src={mvLogo} alt="MV Solution" />
-          <div>
-            <p className="eyebrow">MV Solution IPO Readiness</p>
-          </div>
+      {/* Cartoon Coaster Background */}
+      <div className="coaster-background">
+        <div className="clouds">
+          <div className="cloud cloud-1"></div>
+          <div className="cloud cloud-2"></div>
         </div>
-        <div className="dashboard-actions">
-          <div className="greeting-pill">
-            <span role="img" aria-label="waving hand">
-              👋
-            </span>
-            <div>
-              <small>สวัสดีครับ</small>
-              <strong>{currentUser.name}</strong>
+        <div className="coaster-container">
+          {/* SVG Track and Carts */}
+          <svg className="coaster-track-svg" viewBox="0 0 1000 300" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <path
+                id="trackPath"
+                d="M -100,250 Q 150,250 250,150 C 350,50 450,50 500,200 Q 550,350 700,100 T 1300,250"
+              />
+            </defs>
+
+            <use href="#trackPath" fill="none" stroke="#e5e7eb" strokeWidth="4" className="track-rail-back" />
+            <use href="#trackPath" fill="none" stroke="#374151" strokeWidth="6" className="track-rail-front" />
+
+            {/* Struts */}
+            <line x1="250" y1="150" x2="250" y2="400" stroke="#9ca3af" strokeWidth="2" />
+            <line x1="500" y1="200" x2="500" y2="400" stroke="#9ca3af" strokeWidth="2" />
+            <line x1="700" y1="100" x2="700" y2="400" stroke="#9ca3af" strokeWidth="2" />
+
+            {/* Cart 1 */}
+            <g className="cart-group cart-1">
+              {/* Connector */}
+              <rect x="-65" y="-12" width="20" height="4" fill="#7f1d1d" />
+              {/* Body */}
+              <rect x="-60" y="-35" width="60" height="30" rx="4" fill="#ef4444" stroke="#b91c1c" strokeWidth="2" />
+              {/* Passenger */}
+              <circle cx="-30" cy="-45" r="10" fill="#fcd34d" />
+              {/* Wheels */}
+              <circle cx="-50" cy="-5" r="5" fill="#1f2937" stroke="#999" strokeWidth="1" />
+              <circle cx="-10" cy="-5" r="5" fill="#1f2937" stroke="#999" strokeWidth="1" />
+            </g>
+
+            {/* Cart 2 */}
+            <g className="cart-group cart-2">
+              <rect x="-65" y="-12" width="20" height="4" fill="#7f1d1d" />
+              <rect x="-60" y="-35" width="60" height="30" rx="4" fill="#ef4444" stroke="#b91c1c" strokeWidth="2" />
+              <circle cx="-30" cy="-45" r="10" fill="#fcd34d" />
+              <circle cx="-50" cy="-5" r="5" fill="#1f2937" stroke="#999" strokeWidth="1" />
+              <circle cx="-10" cy="-5" r="5" fill="#1f2937" stroke="#999" strokeWidth="1" />
+            </g>
+
+            {/* Cart 3 */}
+            <g className="cart-group cart-3">
+              <rect x="-60" y="-35" width="60" height="30" rx="4" fill="#ef4444" stroke="#b91c1c" strokeWidth="2" />
+              <circle cx="-30" cy="-45" r="10" fill="#fcd34d" />
+              <circle cx="-50" cy="-5" r="5" fill="#1f2937" stroke="#999" strokeWidth="1" />
+              <circle cx="-10" cy="-5" r="5" fill="#1f2937" stroke="#999" strokeWidth="1" />
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <header className="modern-header sticky-top glass-effect">
+        <div className="header-content">
+          <div className="brand-section">
+            <img src={mvLogo} alt="MV Solution" className="brand-logo" />
+            <div className="brand-text">
+              <span className="brand-name">MV Solution</span>
+              <span className="brand-divider">/</span>
+              <span className="brand-product">IPO Readiness</span>
             </div>
           </div>
-          {isAdminRole && (
-            <button type="button" className="pill-btn" onClick={handleAuditLogs}>
-              Audit Logs
-            </button>
-          )}
-          <button type="button" className="pill-btn danger" onClick={handleLogout}>
-            Logout
-          </button>
+
+          <div className="actions-section">
+            <div className="user-profile">
+              <div className="avatar-circle">
+                {currentUser.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="user-info">
+                <span className="greeting-text">สวัสดีครับ</span>
+                <span className="user-name">{currentUser.name}</span>
+              </div>
+            </div>
+
+            <div className="header-buttons">
+              {isAdminRole && (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={handleAuditLogs}
+                  title="Audit Logs"
+                >
+                  <span role="img" aria-label="logs">📋</span>
+                </button>
+              )}
+              <div className="divider-vertical"></div>
+              <button
+                type="button"
+                className="logout-btn"
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
         </div>
       </header>
       <div className="app-shell">
@@ -559,6 +651,10 @@ function App() {
             onNavigate={(flow) => {
               if (flow === "checklist") {
                 setView("document-checklist");
+              } else if (flow === "report") {
+                setView("progress");
+              } else if (flow === "assessment-report") {
+                setView("assessment-report");
               } else {
                 setStatus(`กำลังนำไปยังโมดูล ${flow?.toUpperCase()}`);
               }
@@ -589,9 +685,13 @@ function App() {
         {isAssessmentReportView && (
           <AssessmentReport
             result={assessmentResult}
-            onBackToUpload={() => setView("assessment-upload")}
+            onBackToUpload={handleStartAssessment}
             onBackHome={goHome}
           />
+        )}
+
+        {safeView === "progress" && (
+          <ProgressReport onBack={goHome} apiBase={API_BASE} />
         )}
 
         {safeView === "admin" && (
