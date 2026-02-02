@@ -81,14 +81,114 @@ def parse_financial_files(workbooks):
         "balance_sheet": {},
         "income_statement": {},
         "ratios": {},
+        "company_name": None,
     }
-    for file in files:
+    
+    print("\n" + "="*80)
+    print("📊 เริ่มการประมวลผลไฟล์ทางการเงิน")
+    print("="*80)
+    
+    for idx, file in enumerate(files):
+        filename = getattr(file, "filename", "") or getattr(file, "name", f"file_{idx+1}")
+        print(f"\n📁 ไฟล์ที่ {idx+1}: {filename}")
+        
         workbook, layout_key = _load_workbook_from_upload(file)
+        print(f"   Layout: {layout_key}")
+        print(f"   Sheets: {[sheet.title for sheet in workbook.worksheets]}")
+        
+        # Extract company name from first file if not already set
+        if aggregated["company_name"] is None:
+            aggregated["company_name"] = _extract_company_name(workbook)
+            if aggregated["company_name"]:
+                print(f"   🏢 ชื่อบริษัท: {aggregated['company_name']}")
+            else:
+                print(f"   ⚠️  ไม่พบชื่อบริษัท")
+        
         extracted = _extract_from_workbook(workbook, layout_key)
         _merge_sections(aggregated["balance_sheet"], extracted["balance_sheet"])
         _merge_sections(aggregated["income_statement"], extracted["income_statement"])
         _merge_sections(aggregated["ratios"], extracted["ratios"])
+    
+    # Summary
+    print("\n" + "-"*80)
+    print("📝 สรุปข้อมูลที่ดึงได้:")
+    print("-"*80)
+    
+    for section_name, section_data in [
+        ("งบดุล (Balance Sheet)", aggregated["balance_sheet"]),
+        ("งบกำไรขาดทุน (Income Statement)", aggregated["income_statement"]),
+        ("อัตราส่วน (Ratios)", aggregated["ratios"])
+    ]:
+        print(f"\n{section_name}:")
+        if section_data:
+            for metric_name, values in section_data.items():
+                years_found = sorted(values.keys())
+                print(f"  ✓ {metric_name}: {len(years_found)} ปี {years_found}")
+        else:
+            print(f"  ⚠️  ไม่มีข้อมูล")
+    
+    print("\n" + "="*80)
+    print("✅ ประมวลผลเสร็จสิ้น")
+    print("="*80 + "\n")
+    
     return aggregated
+
+
+def _extract_company_name(workbook) -> Optional[str]:
+    """
+    Extract company name from Excel workbook.
+    Typically found in row 1, columns A-G of the first or ratio sheet.
+    """
+    # Try ratio sheet first, then first sheet
+    sheets_to_check = []
+    for sheet in workbook.worksheets:
+        sheet_type = _detect_sheet_type(sheet)
+        if sheet_type == "ratio":
+            sheets_to_check.insert(0, sheet)  # Prioritize ratio sheet
+        elif not sheets_to_check:
+            sheets_to_check.append(sheet)  # Fallback to first sheet
+    
+    if not sheets_to_check:
+        return None
+    
+    # Check first few rows for company name, prioritizing row 1
+    for sheet in sheets_to_check[:2]:  # Check max 2 sheets
+        for row_num in [1, 2, 3]:  # Check rows 1-3, prioritize 1
+            for col_letter in ["C", "B", "A", "D", "E", "F", "G"]:  # Prioritize C, B, A
+                cell_value = sheet[f"{col_letter}{row_num}"].value
+                if cell_value and isinstance(cell_value, str):
+                    # Clean up the value
+                    cleaned = str(cell_value).strip()
+                    # Check if it looks like a company name
+                    if len(cleaned) > 5 and (
+                        any(ord(char) >= 0x0E00 and ord(char) <= 0x0E7F for char in cleaned) or  # Contains Thai
+                        "จำกัด" in cleaned or 
+                        "บริษัท" in cleaned or
+                        "มหาชน" in cleaned or
+                        "Company" in cleaned.title() or
+                        "Ltd" in cleaned or
+                        "Public" in cleaned.title()
+                    ):
+                        # Extract just the company name part
+                        # Remove common prefixes/headers
+                        result = cleaned
+                        if "บริษัท" in result:
+                            # Extract from "บริษัท" onwards
+                            idx = result.find("บริษัท")
+                            result = result[idx:]
+                        elif "Company" in result.title():
+                            idx = result.lower().find("company")
+                            result = result[idx:]
+                        
+                        # Remove header text before company name
+                        for prefix in ["อัตราส่วนทางการเงิน - ", "อัตราส่วนทางการเงินที่สำคัญ ", "อัตราส่วน - "]:
+                            if prefix in result:
+                                result = result.replace(prefix, "").strip()
+                        
+                        print(f"🏢 DEBUG: Found company name in {col_letter}{row_num}: {result}")
+                        return result
+    return None
+
 
 
 def _extract_from_workbook(workbook, layout_key: str) -> Dict[str, Dict[str, Dict[int, float]]]:

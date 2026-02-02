@@ -7,7 +7,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from werkzeug.security import generate_password_hash, check_password_hash
+import hashlib
+import secrets
+
+def _hash_password(password: str) -> str:
+    """Hash password using SHA256 with salt."""
+    salt = secrets.token_hex(16)
+    hash_obj = hashlib.sha256((salt + password).encode())
+    return f"{salt}${hash_obj.hexdigest()}"
+
+def _verify_password(password_hash: str, password: str) -> bool:
+    """Verify password against hash."""
+    try:
+        salt, stored_hash = password_hash.split('$')
+        hash_obj = hashlib.sha256((salt + password).encode())
+        return hash_obj.hexdigest() == stored_hash
+    except:
+        return False
 
 _DB_PATH = Path(__file__).resolve().parents[1] / "users.db"
 
@@ -66,7 +82,7 @@ def create_user(name: str, email: str, role: str, password: str) -> User:
     if not password:
         raise ValueError("กรุณาระบุรหัสผ่าน")
 
-    password_hash = generate_password_hash(password)
+    password_hash = _hash_password(password)
     with closing(_get_connection()) as conn:
         try:
             cursor = conn.execute(
@@ -91,7 +107,7 @@ def authenticate_user(email: str, password: str) -> User:
         ).fetchone()
     if row is None:
         raise ValueError("ไม่พบบัญชีผู้ใช้")
-    if not check_password_hash(row["password_hash"], password):
+    if not _verify_password(row["password_hash"], password):
         raise ValueError("อีเมลหรือรหัสผ่านไม่ถูกต้อง")
     return _row_to_user(row)
 
@@ -120,7 +136,7 @@ def update_user(user_id: int, name: str, email: str, role: str, password: Option
         params = [name.strip(), email_normalized, role.strip()]
         set_clause = "name = ?, email = ?, role = ?"
         if password:
-            params.append(generate_password_hash(password))
+            params.append(_hash_password(password))
             set_clause += ", password_hash = ?"
         params.append(user_id)
         conn.execute(f"UPDATE users SET {set_clause} WHERE id = ?", params)

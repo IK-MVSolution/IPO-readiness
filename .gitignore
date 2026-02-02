@@ -5,11 +5,33 @@ frontend/dist/
 
 # Python virtual environments
 venv/
+.venv/
 backend/venv/
+backend/.venv/
 
 # Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
 
 # App specific data
 backend/users.db
+backend/ipo_readiness/*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Vercel
+.vercel/

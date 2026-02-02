@@ -10,7 +10,7 @@ import DocumentChecklist from "./components/DocumentChecklist";
 
 function App() {
   const USER_STORAGE_KEY = "ipo-readiness-user";
-  const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+  const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5001";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);

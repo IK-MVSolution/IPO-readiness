@@ -1,3 +1,4 @@
+import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ipo_readiness.services.parser_thai import parse_financial_files
@@ -16,12 +17,26 @@ from ipo_readiness.services.audit_service import (
     log_action,
     list_logs,
 )
+from ipo_readiness.services.dashboard_service import (
+    init_dashboard_store,
+    list_projects,
+    list_team_members,
+    create_project,
+)
 
 app = Flask(__name__)
-CORS(app)
+
+# CORS configuration for production
+CORS(app, origins=[
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://*.vercel.app",  # Vercel preview deployments
+    os.environ.get("FRONTEND_URL", "*"),  # Production frontend URL
+])
 
 init_user_store()
 init_audit_store()
+init_dashboard_store()
 
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
@@ -38,6 +53,36 @@ def analyze():
         return jsonify({"data": data, "metrics": metrics})
     except ValueError as err:
         return jsonify({"error": str(err)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/dashboard/projects", methods=["GET", "POST"])
+def dashboard_projects():
+    try:
+        if request.method == "POST":
+            payload = request.get_json(force=True)
+            project = create_project(
+                client=payload.get("client"),
+                phase=payload.get("phase"),
+                readiness=int(payload.get("readiness", 0)),
+                status=payload.get("status"),
+                next_milestone=payload.get("next_milestone"),
+                risk=payload.get("risk", "Low")
+            )
+            return jsonify({"project": project.__dict__}), 201
+
+        projects = [p.__dict__ for p in list_projects()]
+        return jsonify({"projects": projects})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/dashboard/team", methods=["GET"])
+def dashboard_team():
+    try:
+        members = [m.__dict__ for m in list_team_members()]
+        return jsonify({"members": members})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -145,4 +190,6 @@ def admin_audit_logs():
 
 
 if __name__=="__main__":
-    app.run(port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5001))
+    debug = os.environ.get("FLASK_ENV", "development") == "development"
+    app.run(host='0.0.0.0', port=port, debug=debug)

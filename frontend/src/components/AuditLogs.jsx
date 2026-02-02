@@ -7,7 +7,7 @@ export default function AuditLogs({ onBack }) {
     const [searchTerm, setSearchTerm] = useState("");
     const [actionFilter, setActionFilter] = useState("all");
     const [userFilter, setUserFilter] = useState("all");
-    const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+    const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5001";
 
     useEffect(() => {
         fetchLogs();

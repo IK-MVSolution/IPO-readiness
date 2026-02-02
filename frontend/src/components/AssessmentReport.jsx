@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
+
 const metricLabels = {
   roa: "ROA",
   roe: "ROE",
@@ -277,18 +278,27 @@ const calcTrend = (series = {}, orderedYears = []) => {
 function AssessmentReport({ result, onBackToUpload, onBackHome }) {
   if (!result) {
     return (
-      <section className="assessment-dashboard">
-        <p>ยังไม่มีผลลัพธ์การประเมิน กรุณาอัปโหลดข้อมูลก่อน</p>
-        <button type="button" className="primary-btn" onClick={onBackToUpload}>
-          กลับไปอัปโหลด
-        </button>
-      </section>
+      <div className="assessment-empty-state">
+        <div className="empty-state-card glass-effect">
+          <div className="empty-icon">📊</div>
+          <h2>ยังไม่มีผลลัพธ์การประเมิน</h2>
+          <p>กรุณาอัปโหลดไฟล์ข้อมูลการเงินเพื่อเริ่มการวิเคราะห์ความพร้อม IPO</p>
+          <button type="button" className="primary-btn huge" onClick={onBackToUpload}>
+            เริ่มการประเมินใหม่
+          </button>
+        </div>
+      </div>
     );
   }
 
   const { data, metrics } = result;
   const years = data?.years || [];
   const heuristics = metrics?.heuristics || {};
+  const ipoAssessment = metrics?.ipo_assessment || {};
+
+  // Debug: Check if company_name is in data
+  console.log("🔍 Debug - Full result data:", data);
+  console.log("🏢 Company name from data:", data?.company_name);
 
   const revenueAvg = averageFromSeries(metrics?.total_revenue);
   const netMarginAvg = averageFromSeries(metrics?.net_profit_margin);
@@ -490,6 +500,20 @@ function AssessmentReport({ result, onBackToUpload, onBackHome }) {
           <div>
             <p className="eyebrow">IPO Assessment</p>
             <h1>ภาพรวมการประเมินล่าสุด</h1>
+            {data?.company_name && (
+              <p style={{
+                fontSize: '1.1rem',
+                fontWeight: '600',
+                color: '#1e293b',
+                marginTop: '0.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                <span style={{ color: '#64748b' }}>🏢</span>
+                {data.company_name}
+              </p>
+            )}
           </div>
           <div className="topbar-actions">
             <input type="text" placeholder="ค้นหา..." />
@@ -502,25 +526,160 @@ function AssessmentReport({ result, onBackToUpload, onBackHome }) {
           </div>
         </header>
 
+
+
+
         {activeTab === "overview" && (
           <>
+            {/* IPO Readiness Assessment - New Section */}
+            {ipoAssessment?.readiness_level && (
+              <section className="ipo-assessment-section">
+                <div className="ipo-assessment-header">
+                  <div className="ipo-readiness-badge" data-level={ipoAssessment.readiness_level}>
+                    <span className="badge-icon">
+                      {ipoAssessment.readiness_level === "พร้อมสำหรับ SET" && "🏆"}
+                      {ipoAssessment.readiness_level === "พร้อมสำหรับ mai" && "✅"}
+                      {ipoAssessment.readiness_level === "ใกล้พร้อม" && "📈"}
+                      {ipoAssessment.readiness_level === "ต้องพัฒนาเพิ่มเติม" && "⚠️"}
+                    </span>
+                    <div>
+                      <p className="badge-label">ระดับความพร้อม IPO</p>
+                      <h2 className="badge-value">{ipoAssessment.readiness_level}</h2>
+                    </div>
+                  </div>
+                  
+                  <div className="ipo-market-cards">
+                    <div className={`market-card ${ipoAssessment.set_assessment?.passed ? 'passed' : 'not-passed'}`}>
+                      <div className="market-card-header">
+                        <span className="market-icon">{ipoAssessment.set_assessment?.passed ? '✅' : '❌'}</span>
+                        <span className="market-name">SET</span>
+                      </div>
+                      <p className="market-status">
+                        {ipoAssessment.set_assessment?.passed ? 'ผ่านเกณฑ์' : `${ipoAssessment.set_assessment?.pass_count || 0}/${ipoAssessment.set_assessment?.total_checks || 5} เกณฑ์`}
+                      </p>
+                    </div>
+                    <div className={`market-card ${ipoAssessment.mai_assessment?.passed ? 'passed' : 'not-passed'}`}>
+                      <div className="market-card-header">
+                        <span className="market-icon">{ipoAssessment.mai_assessment?.passed ? '✅' : '❌'}</span>
+                        <span className="market-name">mai</span>
+                      </div>
+                      <p className="market-status">
+                        {ipoAssessment.mai_assessment?.passed ? 'ผ่านเกณฑ์' : `${ipoAssessment.mai_assessment?.pass_count || 0}/${ipoAssessment.mai_assessment?.total_checks || 5} เกณฑ์`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Key Figures */}
+                <div className="ipo-key-figures">
+                  <h4>ข้อมูลสำคัญสำหรับ IPO</h4>
+                  <div className="key-figures-grid">
+                    <div className="key-figure">
+                      <span className="figure-label">กำไรสุทธิปีล่าสุด</span>
+                      <span className="figure-value">
+                        {ipoAssessment.key_figures?.latest_profit 
+                          ? `฿${formatCurrency(ipoAssessment.key_figures.latest_profit)}`
+                          : '-'}
+                      </span>
+                      <span className="figure-requirement">
+                        SET ≥75M | mai ≥25M
+                      </span>
+                    </div>
+                    <div className="key-figure">
+                      <span className="figure-label">กำไรรวม 2-3 ปี</span>
+                      <span className="figure-value">
+                        {ipoAssessment.key_figures?.cumulative_profit 
+                          ? `฿${formatCurrency(ipoAssessment.key_figures.cumulative_profit)}`
+                          : '-'}
+                      </span>
+                      <span className="figure-requirement">
+                        SET ≥125M | mai ≥40M
+                      </span>
+                    </div>
+                    <div className="key-figure">
+                      <span className="figure-label">ส่วนของผู้ถือหุ้น</span>
+                      <span className="figure-value">
+                        {ipoAssessment.key_figures?.shareholders_equity 
+                          ? `฿${formatCurrency(ipoAssessment.key_figures.shareholders_equity)}`
+                          : '-'}
+                      </span>
+                      <span className="figure-requirement">
+                        SET ≥800M | mai ≥100M
+                      </span>
+                    </div>
+                    <div className="key-figure">
+                      <span className="figure-label">Track Record</span>
+                      <span className="figure-value">
+                        {ipoAssessment.key_figures?.track_record_years || 0} ปี
+                      </span>
+                      <span className="figure-requirement">
+                        SET ≥3 ปี | mai ≥2 ปี
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Criteria Checklist */}
+                <div className="ipo-criteria-section">
+                  <div className="criteria-column">
+                    <h5>เกณฑ์ SET ({ipoAssessment.set_assessment?.pass_count || 0}/{ipoAssessment.set_assessment?.total_checks || 5})</h5>
+                    <ul className="criteria-list">
+                      {ipoAssessment.set_assessment?.checks?.map((check, idx) => (
+                        <li key={idx} className={check.passed ? 'passed' : 'failed'}>
+                          <span className="check-icon">{check.passed ? '✓' : '✗'}</span>
+                          <span className="check-name">{check.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="criteria-column">
+                    <h5>เกณฑ์ mai ({ipoAssessment.mai_assessment?.pass_count || 0}/{ipoAssessment.mai_assessment?.total_checks || 5})</h5>
+                    <ul className="criteria-list">
+                      {ipoAssessment.mai_assessment?.checks?.map((check, idx) => (
+                        <li key={idx} className={check.passed ? 'passed' : 'failed'}>
+                          <span className="check-icon">{check.passed ? '✓' : '✗'}</span>
+                          <span className="check-name">{check.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Recommendations */}
+                {ipoAssessment.recommendations?.length > 0 && (
+                  <div className="ipo-recommendations">
+                    <h4>💡 คำแนะนำ</h4>
+                    <div className="recommendations-list">
+                      {ipoAssessment.recommendations.slice(0, 5).map((rec, idx) => (
+                        <div key={idx} className={`recommendation-item priority-${rec.priority}`}>
+                          <span className="rec-priority">{rec.priority}</span>
+                          <span className="rec-category">{rec.category}</span>
+                          <span className="rec-message">{rec.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+
             <section className="dashboard-widgets">
               <article className="widget widget-score">
                 <div>
-                  <p>คะแนนรวม</p>
+                  <p>สุขภาพการเงิน</p>
                   <h2>
-                    {heuristics.score || 0}
-                    <small> / {heuristics.max_score || heuristics.score || 0}</small>
+                    {ipoAssessment.financial_health?.score || heuristics.score || 0}
+                    <small> / {ipoAssessment.financial_health?.max_score || heuristics.max_score || 0}</small>
                   </h2>
-                  <p className="status-label">{heuristics.readiness || "ไม่ระบุ"}</p>
+                  <p className="status-label">{ipoAssessment.financial_health?.level || heuristics.readiness || "ไม่ระบุ"}</p>
                 </div>
                 <div className="score-progress">
                   <div
                     className="score-progress__bar"
-                    style={{ width: `${heuristics.percentage || 0}%` }}
+                    style={{ width: `${ipoAssessment.financial_health?.percentage || heuristics.percentage || 0}%` }}
                   />
                 </div>
-                <small>{heuristics.percentage || 0}% ของคะแนนทั้งหมด</small>
+                <small>{ipoAssessment.financial_health?.percentage || heuristics.percentage || 0}% ของคะแนนทั้งหมด</small>
               </article>
               {highlightCards.map((card) => (
                 <article className="widget" key={card.label}>
