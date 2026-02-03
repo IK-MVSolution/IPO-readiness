@@ -261,6 +261,11 @@
     font-weight: 600;
 }
 
+.assessed-by {
+    color: #475569;
+    font-size: 0.9rem;
+}
+
 .progress-cell {
     display: flex;
     align-items: center;

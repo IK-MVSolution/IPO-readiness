@@ -24,9 +24,7 @@ __pycache__/
 
 # App specific data
 backend/users.db
-backend/ipo_readiness/*.db
-
-# IDE
+backend/ipo_readiness/*.db# IDE
 .vscode/
 .idea/
 *.swp

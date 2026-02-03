@@ -680,6 +680,21 @@ function App() {
               setAssessmentResult(data);
               setView("assessment-report");
 
+              // บันทึกผลประเมินและสร้างโปรเจกต์ใน Client Portfolio (ข้อมูลจริง)
+              try {
+                await fetch(`${API_BASE}/api/assessments/save`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    data: data?.data,
+                    metrics: data?.metrics,
+                    user_id: currentUser?.id,
+                  }),
+                });
+              } catch (err) {
+                console.error("Failed to save assessment:", err);
+              }
+
               // Log assessment completion
               const companyName = data?.data?.company_name || "Unknown Company";
               const score = data?.metrics?.heuristics?.score || 0;

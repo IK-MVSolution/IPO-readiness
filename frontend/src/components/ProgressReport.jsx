@@ -200,6 +200,7 @@ const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
                             <thead>
                                 <tr>
                                     <th>Client / ID</th>
+                                    <th>ประเมินโดย</th>
                                     <th>Phase</th>
                                     <th>Readiness Health</th>
                                     <th>Status</th>
@@ -221,6 +222,9 @@ const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
                                                 <strong>{project.client}</strong>
                                                 <small>ID: {project.id}</small>
                                             </div>
+                                        </td>
+                                        <td>
+                                            <span className="assessed-by">{project.assessed_by || '–'}</span>
                                         </td>
                                         <td><span className="phase-tag">{project.phase}</span></td>
                                         <td>

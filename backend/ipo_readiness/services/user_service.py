@@ -1,6 +1,7 @@
 """User repository: SQLite (local) or PostgreSQL (production via DATABASE_URL)."""
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
@@ -84,6 +85,24 @@ def init_user_store() -> None:
         cur = conn.cursor()
         cur.execute(sql)
         conn.commit()
+
+    # Optional: create first admin when DB is empty (set SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD in Render)
+    _seed_admin_if_empty()
+
+
+def _seed_admin_if_empty() -> None:
+    """If no users exist and SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD are set, create that admin."""
+    seed_email = (os.environ.get("SEED_ADMIN_EMAIL") or "").strip().lower()
+    seed_password = os.environ.get("SEED_ADMIN_PASSWORD") or ""
+    if not seed_email or not seed_password:
+        return
+    users = list_users()
+    if users:
+        return
+    try:
+        create_user(name="Admin", email=seed_email, role="admin", password=seed_password)
+    except Exception:
+        pass  # e.g. race condition or duplicate, ignore
 
 
 def list_users() -> List[User]:

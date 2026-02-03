@@ -9,7 +9,6 @@ from ipo_readiness.services.user_service import (
     list_users,
     authenticate_user,
     update_user,
-    update_user,
     delete_user,
 )
 from ipo_readiness.services.audit_service import (
@@ -22,6 +21,7 @@ from ipo_readiness.services.dashboard_service import (
     list_projects,
     list_team_members,
     create_project,
+    save_assessment_and_create_project,
 )
 
 app = Flask(__name__)
@@ -74,6 +74,25 @@ def dashboard_projects():
 
         projects = [p.__dict__ for p in list_projects()]
         return jsonify({"projects": projects})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/assessments/save", methods=["POST"])
+def save_assessment():
+    """Save assessment result and create project for Client Portfolio."""
+    try:
+        payload = request.get_json(force=True)
+        data = payload.get("data") or {}
+        metrics = payload.get("metrics") or {}
+        user_id = payload.get("user_id")
+        company_name = data.get("company_name") or "บริษัทไม่ระบุชื่อ"
+        project = save_assessment_and_create_project(
+            company_name=company_name,
+            user_id=user_id,
+            metrics=metrics,
+        )
+        return jsonify({"project": project.__dict__}), 201
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
