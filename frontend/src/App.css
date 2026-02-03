@@ -712,6 +712,12 @@ body {
   animation: shake 0.5s ease-in-out;
 }
 
+.status-message.login-slow-hint {
+  background: #e0f2fe;
+  color: #0369a1;
+  animation: none;
+}
+
 @keyframes shake {
 
   0%,

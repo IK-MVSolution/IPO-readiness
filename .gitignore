@@ -31,7 +31,5 @@ backend/ipo_readiness/*.db
 .idea/
 *.swp
 *.swo
-.DS_Store
-
-# Vercel
+.DS_Store# Vercel
 .vercel/

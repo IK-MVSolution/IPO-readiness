@@ -16,6 +16,7 @@ function App() {
   const [remember, setRemember] = useState(false);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loginSlowHint, setLoginSlowHint] = useState(false);
   const [view, setView] = useState("login");
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
@@ -70,7 +71,9 @@ function App() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setLoading(true);
+    setLoginSlowHint(false);
     setStatus("");
+    const slowTimer = setTimeout(() => setLoginSlowHint(true), 5000);
     try {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
@@ -107,7 +110,9 @@ function App() {
     } catch (error) {
       setStatus(error.message);
     } finally {
+      clearTimeout(slowTimer);
       setLoading(false);
+      setLoginSlowHint(false);
     }
   };
 
@@ -319,7 +324,12 @@ function App() {
                 {loading ? <span className="loader"></span> : "Sign In →"}
               </button>
             </form>
-            {status && <p className="status-message">{status}</p>}
+            {loginSlowHint && loading && (
+              <p className="status-message login-slow-hint">
+                กำลังเชื่อมต่อเซิร์ฟเวอร์... หากโหลดนาน อาจเป็นเพราะเซิร์ฟเวอร์กำลังเริ่มทำงาน (รอได้ถึง ~1 นาที) กรุณารอสักครู่
+              </p>
+            )}
+            {status && !loginSlowHint && <p className="status-message">{status}</p>}
             <div className="login-footer">
               <p>© 2025 MV Solution. All rights reserved.</p>
             </div>
