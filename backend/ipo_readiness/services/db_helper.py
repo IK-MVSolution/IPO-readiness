@@ -97,8 +97,9 @@ def execute_insert(conn, sql: str, params: Optional[Tuple] = None) -> int:
     cur = conn.cursor()
     cur.execute(sql_adapted, params)
     if use_postgres():
-        cur.execute("SELECT LASTVAL()")
-        last_id = cur.fetchone()[0]
+        cur.execute("SELECT LASTVAL() AS lastval")
+        row = cur.fetchone()
+        last_id = row["lastval"] if row else 0
     else:
         last_id = cur.lastrowid
     conn.commit()
