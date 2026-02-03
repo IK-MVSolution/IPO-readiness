@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import "./ProgressReport.css";
 
-const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
+const ProgressReport = ({ onBack, apiBase = "http://localhost:5001", currentUser = null }) => {
     const [filter, setFilter] = useState("All");
-    const [projects, setProjects] = useState([]);
+    const [assessments, setAssessments] = useState([]);
     const [teamMembers, setTeamMembers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    /** Admin เลือกคนใน Team Pulse เพื่อดู Client Portfolio ของคนนั้น (ความเป็นส่วนตัว) */
+    const [selectedUserId, setSelectedUserId] = useState(null);
 
     // Modal State
     const [showModal, setShowModal] = useState(false);
@@ -19,23 +21,30 @@ const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
         risk: "Low"
     });
 
+    const isAdmin = currentUser?.role === "admin";
+
     useEffect(() => {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                const [projectsRes, teamRes] = await Promise.all([
-                    fetch(`${apiBase}/api/dashboard/projects`),
+                const params = new URLSearchParams();
+                if (currentUser?.id) params.set("user_id", currentUser.id);
+                if (currentUser?.role) params.set("role", currentUser.role);
+                if (isAdmin && selectedUserId != null) params.set("view_user_id", selectedUserId);
+
+                const [assessmentsRes, teamRes] = await Promise.all([
+                    fetch(`${apiBase}/api/dashboard/assessments?${params.toString()}`),
                     fetch(`${apiBase}/api/dashboard/team`)
                 ]);
 
-                if (!projectsRes.ok || !teamRes.ok) {
+                if (!assessmentsRes.ok || !teamRes.ok) {
                     throw new Error("Failed to fetch dashboard data");
                 }
 
-                const projectsData = await projectsRes.json();
+                const assessmentsData = await assessmentsRes.json();
                 const teamData = await teamRes.json();
 
-                setProjects(projectsData.projects || []);
+                setAssessments(assessmentsData.assessments || []);
                 setTeamMembers(teamData.members || []);
             } catch (err) {
                 console.error("Dashboard error:", err);
@@ -46,7 +55,7 @@ const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
         };
 
         fetchData();
-    }, [apiBase]);
+    }, [apiBase, currentUser?.id, currentUser?.role, isAdmin, selectedUserId]);
 
     if (loading) {
         return (
@@ -66,10 +75,10 @@ const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
         );
     }
 
-    const totalProjects = projects.length;
-    const highRiskProjects = projects.filter(p => p.risk === "High").length;
+    const totalProjects = assessments.length;
+    const highRiskProjects = assessments.filter(a => a.risk === "High").length;
     const avgReadiness = totalProjects > 0
-        ? Math.round(projects.reduce((acc, p) => acc + p.readiness, 0) / totalProjects)
+        ? Math.round(assessments.reduce((acc, a) => acc + (a.readiness_score ?? a.readiness ?? 0), 0) / totalProjects)
         : 0;
     const avgTeamLoad = teamMembers.length > 0
         ? Math.round(teamMembers.reduce((m, t) => m + t.load, 0) / teamMembers.length)
@@ -88,15 +97,23 @@ const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
     const handleCreateProject = async (e) => {
         e.preventDefault();
         try {
-            const res = await fetch(`${apiBase}/api/dashboard/projects`, {
+            const res = await fetch(`${apiBase}/api/dashboard/assessments`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(newProject)
+                body: JSON.stringify({
+                    company_name: newProject.client,
+                    phase: newProject.phase,
+                    status: newProject.status,
+                    readiness_score: newProject.readiness,
+                    next_milestone: newProject.next_milestone,
+                    risk: newProject.risk,
+                    user_id: currentUser?.id ?? null,
+                })
             });
             if (!res.ok) throw new Error("Failed to create project");
 
             const data = await res.json();
-            setProjects(prev => [...prev, data.project]);
+            setAssessments(prev => [data.assessment, ...prev]);
             setShowModal(false);
             setNewProject({
                 client: "",
@@ -142,7 +159,7 @@ const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
                     <div className="kpi-content">
                         <h3>Total Active Projects</h3>
                         <div className="kpi-value">{totalProjects}</div>
-                        <span className="kpi-trend positive">↑ 2 from last month</span>
+                        <span className="kpi-trend">จากผลประเมินจริง</span>
                     </div>
                 </div>
                 <div className="kpi-card green">
@@ -181,7 +198,16 @@ const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
                 {/* Portfolio Health */}
                 <section className="dashboard-section main-section">
                     <div className="section-header">
-                        <h2>Client Portfolio</h2>
+                        <div>
+                            <h2>Client Portfolio</h2>
+                            {isAdmin && (
+                                <p className="portfolio-view-label">
+                                    กำลังแสดง: {selectedUserId != null
+                                        ? (teamMembers.find(m => m.id === selectedUserId)?.name ?? "คนที่เลือก")
+                                        : "ทั้งหมด"}
+                                </p>
+                            )}
+                        </div>
                         <div className="filter-pills">
                             {['All', 'High Risk', 'Filing Prep', 'Audit'].map(f => (
                                 <button
@@ -209,53 +235,55 @@ const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {projects.filter(p => {
+                                {assessments.filter(a => {
                                     if (filter === 'All') return true;
-                                    if (filter === 'High Risk') return p.risk === 'High';
-                                    if (filter === 'Filing Prep') return p.phase === 'Filing Prep';
-                                    if (filter === 'Audit') return p.phase.includes('Audit');
+                                    if (filter === 'High Risk') return a.risk === 'High';
+                                    if (filter === 'Filing Prep') return a.phase === 'Filing Prep';
+                                    if (filter === 'Audit') return (a.phase || '').includes('Audit');
                                     return true;
-                                }).map(project => (
-                                    <tr key={project.id} className={project.risk === 'High' ? 'risk-row' : ''}>
+                                }).map(a => {
+                                    const readiness = a.readiness_score ?? a.readiness ?? 0;
+                                    return (
+                                    <tr key={a.id} className={a.risk === 'High' ? 'risk-row' : ''}>
                                         <td>
                                             <div className="client-info">
-                                                <strong>{project.client}</strong>
-                                                <small>ID: {project.id}</small>
+                                                <strong>{a.company_name}</strong>
+                                                <small>ID: {a.id}</small>
                                             </div>
                                         </td>
                                         <td>
-                                            <span className="assessed-by">{project.assessed_by || '–'}</span>
+                                            <span className="assessed-by">{a.assessed_by || '–'}</span>
                                         </td>
-                                        <td><span className="phase-tag">{project.phase}</span></td>
+                                        <td><span className="phase-tag">{a.phase}</span></td>
                                         <td>
                                             <div className="progress-cell">
                                                 <div className="progress-track">
                                                     <div
-                                                        className={`progress-fill ${project.readiness >= 80 ? 'high' : project.readiness >= 50 ? 'med' : 'low'}`}
-                                                        style={{ width: `${project.readiness}%` }}
+                                                        className={`progress-fill ${readiness >= 80 ? 'high' : readiness >= 50 ? 'med' : 'low'}`}
+                                                        style={{ width: `${readiness}%` }}
                                                     ></div>
                                                 </div>
-                                                <span>{project.readiness}%</span>
+                                                <span>{readiness}%</span>
                                             </div>
                                         </td>
                                         <td>
-                                            <span className={`status-dot ${project.status.toLowerCase().replace(' ', '-')}`}></span>
-                                            {project.status}
+                                            <span className={`status-dot ${(a.status || '').toLowerCase().replace(' ', '-')}`}></span>
+                                            {a.status}
                                         </td>
-                                        <td className="w-150">{project.next_milestone || project.nextMilestone}</td>
+                                        <td className="w-150">{a.next_milestone}</td>
                                         <td>
                                             <button className="icon-action-btn">
                                                 <span className="material-symbols-outlined">arrow_forward</span>
                                             </button>
                                         </td>
                                     </tr>
-                                ))}
+                                );})}
                             </tbody>
                         </table>
                     </div>
                 </section>
 
-                {/* Team Pulse */}
+                {/* Team Pulse - Admin คลิกเลือกคนเพื่อดู Client Portfolio ของคนนั้น */}
                 <aside className="dashboard-section side-section">
                     <div className="section-header">
                         <h2>Team Pulse</h2>
@@ -263,10 +291,18 @@ const ProgressReport = ({ onBack, apiBase = "http://localhost:5001" }) => {
                             <span className="material-symbols-outlined">more_vert</span>
                         </button>
                     </div>
-
+                    {isAdmin && (
+                        <p className="team-pulse-hint">คลิกชื่อเพื่อดู Client Portfolio ของคนนั้น</p>
+                    )}
                     <div className="team-pulse-list">
                         {teamMembers.map(member => (
-                            <div key={member.id} className="pulse-item">
+                            <div
+                                key={member.id}
+                                className={`pulse-item ${isAdmin ? 'pulse-item--clickable' : ''} ${selectedUserId === member.id ? 'pulse-item--selected' : ''}`}
+                                role={isAdmin ? "button" : undefined}
+                                onClick={() => isAdmin && setSelectedUserId(prev => prev === member.id ? null : member.id)}
+                                onKeyDown={(e) => isAdmin && (e.key === 'Enter' || e.key === ' ') && setSelectedUserId(prev => prev === member.id ? null : member.id)}
+                            >
                                 <div className="pulse-header">
                                     <div className="pulse-avatar">{member.avatar}</div>
                                     <div className="pulse-info">

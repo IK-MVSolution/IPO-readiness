@@ -330,6 +330,19 @@
 }
 
 /* Side Section (Team Pulse) */
+.portfolio-view-label {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin: 0.25rem 0 0 0;
+    font-weight: normal;
+}
+
+.team-pulse-hint {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin: 0 0 0.75rem 0;
+}
+
 .team-pulse-list {
     display: flex;
     flex-direction: column;
@@ -341,6 +354,22 @@
     border-radius: 12px;
     padding: 1rem;
     border: 1px solid #e2e8f0;
+}
+
+.pulse-item--clickable {
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.pulse-item--clickable:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+.pulse-item--selected {
+    border-color: #0369a1;
+    background: #f0f9ff;
+    box-shadow: 0 0 0 2px rgba(3, 105, 161, 0.2);
 }
 
 .pulse-header {

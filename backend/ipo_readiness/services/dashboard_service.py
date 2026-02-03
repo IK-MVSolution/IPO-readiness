@@ -41,6 +41,20 @@ class TeamMember:
     avatar: str
 
 
+@dataclass
+class AssessmentRow:
+    """One row for Client Portfolio from assessments (ข้อมูลจริง)."""
+    id: int
+    company_name: str
+    assessed_by: Optional[str]
+    readiness_score: int
+    phase: str
+    status: str
+    next_milestone: str
+    risk: str
+    created_at: Optional[str] = None
+
+
 def _row_get(row, key: str, default=None):
     """Get value from row (works for sqlite3.Row and dict-like RealDictRow)."""
     if hasattr(row, "get"):
@@ -193,14 +207,15 @@ def _seed_team_if_empty() -> None:
 
 
 def _backfill_assessed_by(projects: List[Project]) -> List[Project]:
-    """Fill assessed_by from assessments table for projects that have no user_id (old or manual)."""
+    """Fill assessed_by from assessments table and persist user_id to projects for next load."""
     need_fill = [p for p in projects if not p.assessed_by and p.client]
     if not need_fill:
         return projects
     clients = list({p.client for p in need_fill})
     user_id_to_name = {u.id: u.name for u in list_users()}
+    client_to_name = {}
+    client_to_user_id = {}
     with closing(get_connection()) as conn:
-        # Latest assessment per client (company_name) -> user_id
         placeholders = ",".join("?" * len(clients))
         if use_postgres():
             sql = f"""
@@ -217,20 +232,27 @@ def _backfill_assessed_by(projects: List[Project]) -> List[Project]:
                 AND a.created_at = (SELECT MAX(a2.created_at) FROM assessments a2 WHERE a2.company_name = a.company_name)
             """
         rows = execute_fetchall(conn, sql, tuple(clients))
-    client_to_name = {}
-    for row in rows:
-        c = _row_get(row, "company_name")
-        uid = _row_get(row, "user_id")
-        if c and uid and uid in user_id_to_name:
-            client_to_name[c] = user_id_to_name[uid]
+        for row in rows:
+            c = _row_get(row, "company_name")
+            uid = _row_get(row, "user_id")
+            if c and uid and uid in user_id_to_name:
+                client_to_name[c] = user_id_to_name[uid]
+                client_to_user_id[c] = uid
+        # Persist user_id to projects so next time the join returns assessed_by
+        for c, uid in client_to_user_id.items():
+            try:
+                execute_commit(conn, "UPDATE projects SET user_id = ? WHERE client = ? AND (user_id IS NULL OR user_id = 0)", (uid, c))
+            except Exception:
+                pass
     if not client_to_name:
         return projects
     out = []
     for p in projects:
         if not p.assessed_by and p.client in client_to_name:
+            uid = client_to_user_id.get(p.client)
             out.append(Project(
                 p.id, p.client, p.phase, p.readiness, p.status, p.next_milestone, p.risk,
-                user_id=p.user_id, assessed_by=client_to_name[p.client],
+                user_id=uid or p.user_id, assessed_by=client_to_name[p.client],
             ))
         else:
             out.append(p)
@@ -255,6 +277,79 @@ def list_projects() -> List[Project]:
             )
     projects = [_row_to_project(row) for row in rows]
     return _backfill_assessed_by(projects)
+
+
+def list_assessments(filter_by_user_id: Optional[int] = None) -> List[AssessmentRow]:
+    """Client Portfolio: ข้อมูลจริงจาก assessments. filter_by_user_id=คนใดคนหนึ่ง จะแสดงเฉพาะของคนนั้น (ความเป็นส่วนตัว). None = ทั้งหมด (สำหรับ Admin)."""
+    with closing(get_connection()) as conn:
+        try:
+            if filter_by_user_id is not None:
+                rows = execute_fetchall(
+                    conn,
+                    """SELECT a.id, a.company_name, a.readiness_score, a.phase, a.status, a.next_milestone, a.risk, a.created_at,
+                              u.name AS assessed_by
+                       FROM assessments a LEFT JOIN users u ON a.user_id = u.id
+                       WHERE a.user_id = ?
+                       ORDER BY a.created_at DESC, a.id DESC""",
+                    (filter_by_user_id,),
+                )
+            else:
+                rows = execute_fetchall(
+                    conn,
+                    """SELECT a.id, a.company_name, a.readiness_score, a.phase, a.status, a.next_milestone, a.risk, a.created_at,
+                              u.name AS assessed_by
+                       FROM assessments a LEFT JOIN users u ON a.user_id = u.id
+                       ORDER BY a.created_at DESC, a.id DESC""",
+                )
+        except Exception:
+            if filter_by_user_id is not None:
+                rows = execute_fetchall(
+                    conn,
+                    "SELECT id, company_name, readiness_score, phase, status, next_milestone, risk, created_at FROM assessments WHERE user_id = ? ORDER BY id DESC",
+                    (filter_by_user_id,),
+                )
+            else:
+                rows = execute_fetchall(
+                    conn,
+                    "SELECT id, company_name, readiness_score, phase, status, next_milestone, risk, created_at FROM assessments ORDER BY id DESC",
+                )
+    out = []
+    for row in rows:
+        out.append(AssessmentRow(
+            id=_row_get(row, "id") or 0,
+            company_name=_row_get(row, "company_name") or "",
+            assessed_by=_row_get(row, "assessed_by"),
+            readiness_score=int(_row_get(row, "readiness_score") or 0),
+            phase=_row_get(row, "phase") or "",
+            status=_row_get(row, "status") or "",
+            next_milestone=_row_get(row, "next_milestone") or "",
+            risk=_row_get(row, "risk") or "Low",
+            created_at=str(_row_get(row, "created_at")) if _row_get(row, "created_at") else None,
+        ))
+    return out
+
+
+def create_assessment_manual(
+    company_name: str,
+    user_id: Optional[int],
+    phase: str = "Filing Prep",
+    status: str = "On Track",
+    readiness_score: int = 0,
+    next_milestone: str = "",
+    risk: str = "Low",
+) -> AssessmentRow:
+    """เพิ่มรายการใน Client Portfolio จากปุ่ม + New Project (ข้อมูลจริง)."""
+    with closing(get_connection()) as conn:
+        aid = execute_insert(
+            conn,
+            """INSERT INTO assessments (company_name, user_id, readiness_score, phase, status, risk, next_milestone)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (company_name, user_id, readiness_score, phase, status, risk, next_milestone or ""),
+        )
+    for a in list_assessments():
+        if a.id == aid:
+            return a
+    return AssessmentRow(aid, company_name, None, readiness_score, phase, status, next_milestone, risk, None)
 
 
 def list_team_members() -> List[TeamMember]:

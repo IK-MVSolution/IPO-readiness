@@ -716,7 +716,7 @@ function App() {
         )}
 
         {safeView === "progress" && (
-          <ProgressReport onBack={goHome} apiBase={API_BASE} />
+          <ProgressReport onBack={goHome} apiBase={API_BASE} currentUser={currentUser} />
         )}
 
         {safeView === "admin" && (

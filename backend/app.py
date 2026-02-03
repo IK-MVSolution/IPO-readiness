@@ -20,7 +20,9 @@ from ipo_readiness.services.dashboard_service import (
     init_dashboard_store,
     list_projects,
     list_team_members,
+    list_assessments,
     create_project,
+    create_assessment_manual,
     save_assessment_and_create_project,
 )
 
@@ -93,6 +95,65 @@ def save_assessment():
             metrics=metrics,
         )
         return jsonify({"project": project.__dict__}), 201
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/dashboard/assessments", methods=["GET", "POST"])
+def dashboard_assessments():
+    """Client Portfolio: ข้อมูลจริงจาก assessments (ไม่มี Mock)."""
+    try:
+        if request.method == "POST":
+            payload = request.get_json(force=True)
+            a = create_assessment_manual(
+                company_name=payload.get("company_name") or payload.get("client") or "",
+                user_id=payload.get("user_id"),
+                phase=payload.get("phase", "Filing Prep"),
+                status=payload.get("status", "On Track"),
+                readiness_score=int(payload.get("readiness_score") or payload.get("readiness", 0)),
+                next_milestone=payload.get("next_milestone", ""),
+                risk=payload.get("risk", "Low"),
+            )
+            return jsonify({
+                "assessment": {
+                    "id": a.id,
+                    "company_name": a.company_name,
+                    "assessed_by": a.assessed_by,
+                    "readiness_score": a.readiness_score,
+                    "phase": a.phase,
+                    "status": a.status,
+                    "next_milestone": a.next_milestone,
+                    "risk": a.risk,
+                    "created_at": a.created_at,
+                }
+            }), 201
+
+        # ความเป็นส่วนตัว: user ธรรมดาเห็นเฉพาะของตัวเอง, Admin เห็นทุกคน หรือเลือกดูของคนใดคนหนึ่งจาก Team Pulse
+        user_id_param = request.args.get("user_id", type=int)
+        role_param = request.args.get("role", "").strip().lower()
+        view_user_id_param = request.args.get("view_user_id", type=int)
+
+        if role_param == "admin":
+            filter_by = view_user_id_param if view_user_id_param is not None else None
+        else:
+            filter_by = user_id_param
+
+        items = list_assessments(filter_by_user_id=filter_by)
+        data = [
+            {
+                "id": a.id,
+                "company_name": a.company_name,
+                "assessed_by": a.assessed_by,
+                "readiness_score": a.readiness_score,
+                "phase": a.phase,
+                "status": a.status,
+                "next_milestone": a.next_milestone,
+                "risk": a.risk,
+                "created_at": a.created_at,
+            }
+            for a in items
+        ]
+        return jsonify({"assessments": data})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
