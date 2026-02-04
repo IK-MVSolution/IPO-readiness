@@ -85,14 +85,11 @@ function App() {
         throw new Error(data.error || "เข้าสู่ระบบไม่สำเร็จ");
       }
       setCurrentUser(data.user);
-      if (remember) {
-        window.localStorage.setItem(
-          USER_STORAGE_KEY,
-          JSON.stringify({ user: data.user, remember: true })
-        );
-      } else {
-        window.localStorage.removeItem(USER_STORAGE_KEY);
-      }
+      // บันทึกทุกครั้งที่ล็อกอิน เพื่อให้รีเฟรชแล้วไม่ต้องล็อกอินใหม่
+      window.localStorage.setItem(
+        USER_STORAGE_KEY,
+        JSON.stringify({ user: data.user, remember })
+      );
       setView("home");
       setStatus(`ยินดีต้อนรับ ${data.user.name}`);
 
@@ -178,15 +175,12 @@ function App() {
     try {
       const parsed = JSON.parse(storedUser);
       const userData = parsed?.user || parsed;
-      const shouldRestore = parsed?.remember === true;
-
-      if (shouldRestore && userData?.id) {
+      if (userData?.id) {
         setCurrentUser(userData);
-        setRemember(true);
+        setRemember(parsed?.remember === true);
         setView("home");
         setStatus(`ยินดีต้อนรับกลับ ${userData.name}`);
       } else {
-        // Clean up old/invalid cached sessions so the app drops to the login screen
         window.localStorage.removeItem(USER_STORAGE_KEY);
       }
     } catch (error) {
