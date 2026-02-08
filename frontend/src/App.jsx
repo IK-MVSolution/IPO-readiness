@@ -541,8 +541,10 @@ function App() {
     );
   }
 
+  const roleLabel = isAdminRole ? "สิทธิ์ Admin" : (currentUser?.role ? `สิทธิ์ ${currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)}` : "สิทธิ์ User");
+
   return (
-    <div className="dashboard-shell">
+    <div className={`dashboard-shell ${isAdminRole ? "dashboard-shell--admin" : "dashboard-shell--user"}`}>
       {/* Cartoon Coaster Background */}
       <div className="coaster-background">
         <div className="clouds">
@@ -619,6 +621,9 @@ function App() {
               <div className="user-info">
                 <span className="greeting-text">สวัสดีครับ</span>
                 <span className="user-name">{currentUser.name}</span>
+                <span className={`role-badge role-badge--${isAdminRole ? "admin" : (currentUser?.role || "user")}`}>
+                  {roleLabel}
+                </span>
               </div>
             </div>
 
@@ -645,6 +650,9 @@ function App() {
           </div>
         </div>
       </header>
+      <div className={`role-banner role-banner--${isAdminRole ? "admin" : (currentUser?.role || "user")}`}>
+        <span className="role-banner__text">{roleLabel}</span>
+      </div>
       <div className="app-shell">
         {safeView === "home" && (
           <Home
