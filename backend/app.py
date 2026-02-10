@@ -46,6 +46,49 @@ def health_check():
     """Health check endpoint - ใช้สำหรับ cron job เพื่อให้ instance ตื่นอยู่ (ไม่ sleep)"""
     return jsonify({"status": "ok", "service": "IPO Readiness API"}), 200
 
+@app.route("/api/analyze/preview", methods=["POST"])
+def analyze_preview():
+    """Preview: ดึงชื่อบริษัทจากไฟล์ที่อัปโหลดก่อนประมวลผลจริง (ตรวจสอบไฟล์ผิด)"""
+    try:
+        workbooks = request.files.getlist("workbooks") or []
+        if not workbooks:
+            single = request.files.get("workbook")
+            if single:
+                workbooks = [single]
+        if not workbooks:
+            return jsonify({"error": "กรุณาอัปโหลดไฟล์ข้อมูลทางการเงิน"}), 400
+        
+        from ipo_readiness.services.parser_thai import _extract_company_name, _load_workbook_from_upload
+        
+        companies = []
+        for idx, file in enumerate(workbooks):
+            filename = getattr(file, "filename", "") or getattr(file, "name", f"file_{idx+1}")
+            try:
+                workbook, _ = _load_workbook_from_upload(file)
+                company_name = _extract_company_name(workbook)
+                companies.append({
+                    "file": filename,
+                    "company": company_name or "(ไม่พบชื่อบริษัท)"
+                })
+            except Exception as e:
+                companies.append({
+                    "file": filename,
+                    "company": f"(อ่านไฟล์ไม่ได้: {str(e)})"
+                })
+        
+        unique_companies = set([c["company"] for c in companies if c["company"] and c["company"] != "(ไม่พบชื่อบริษัท)" and not c["company"].startswith("(อ่าน")])
+        is_consistent = len(unique_companies) <= 1
+        
+        return jsonify({
+            "companies": companies,
+            "is_consistent": is_consistent,
+            "unique_companies": list(unique_companies) if unique_companies else [],
+            "message": "ชื่อบริษัทตรงกัน" if is_consistent else "⚠️ พบชื่อบริษัทไม่ตรงกัน - กรุณาตรวจสอบไฟล์"
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
     try:

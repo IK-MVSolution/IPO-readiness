@@ -1389,6 +1389,50 @@ body {
   background: #f8fafc;
 }
 
+.file-preview {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 2px solid;
+  background: rgba(255, 255, 255, 0.95);
+}
+.file-preview--ok {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+.file-preview--warning {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+.file-preview strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+.file-preview ul {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+  list-style: disc;
+}
+.file-preview li {
+  margin: 0.3rem 0;
+  font-size: 0.85rem;
+}
+.file-preview .file-name {
+  font-weight: 600;
+  color: #475569;
+}
+.file-preview .warning-text {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: #fef3c7;
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #92400e;
+  font-weight: 600;
+}
+
 .assessment-result {
   background: rgba(15, 23, 42, 0.85);
   color: #f8fafc;

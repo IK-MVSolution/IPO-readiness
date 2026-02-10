@@ -88,6 +88,29 @@ def parse_financial_files(workbooks):
     print("📊 เริ่มการประมวลผลไฟล์ทางการเงิน")
     print("="*80)
     
+    # ตรวจสอบชื่อบริษัทจากทุกไฟล์ก่อน (ป้องกันการอัปโหลดไฟล์ผิด)
+    company_names_found = []
+    for idx, file in enumerate(files):
+        filename = getattr(file, "filename", "") or getattr(file, "name", f"file_{idx+1}")
+        workbook, _ = _load_workbook_from_upload(file)
+        company_name = _extract_company_name(workbook)
+        company_names_found.append({
+            "file": filename,
+            "company": company_name or "(ไม่พบชื่อบริษัท)"
+        })
+    
+    # ตรวจสอบว่าชื่อบริษัทตรงกันหรือไม่ (ถ้ามีหลายไฟล์)
+    if len(files) > 1:
+        unique_companies = set([c["company"] for c in company_names_found if c["company"] and c["company"] != "(ไม่พบชื่อบริษัท)"])
+        if len(unique_companies) > 1:
+            error_msg = "⚠️ พบชื่อบริษัทไม่ตรงกันในไฟล์ที่อัปโหลด:\n"
+            for item in company_names_found:
+                error_msg += f"   - {item['file']}: {item['company']}\n"
+            error_msg += "\nกรุณาตรวจสอบและอัปโหลดเฉพาะไฟล์ของบริษัทเดียวกัน"
+            print(error_msg)
+            raise ValueError(error_msg)
+    
+    # ประมวลผลไฟล์ (ชื่อบริษัทตรงกันแล้ว หรือมีไฟล์เดียว)
     for idx, file in enumerate(files):
         filename = getattr(file, "filename", "") or getattr(file, "name", f"file_{idx+1}")
         print(f"\n📁 ไฟล์ที่ {idx+1}: {filename}")
@@ -98,8 +121,8 @@ def parse_financial_files(workbooks):
         
         # Extract company name from first file if not already set
         if aggregated["company_name"] is None:
-            aggregated["company_name"] = _extract_company_name(workbook)
-            if aggregated["company_name"]:
+            aggregated["company_name"] = company_names_found[idx]["company"]
+            if aggregated["company_name"] and aggregated["company_name"] != "(ไม่พบชื่อบริษัท)":
                 print(f"   🏢 ชื่อบริษัท: {aggregated['company_name']}")
             else:
                 print(f"   ⚠️  ไม่พบชื่อบริษัท")
