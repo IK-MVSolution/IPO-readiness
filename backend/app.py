@@ -40,6 +40,12 @@ init_user_store()
 init_audit_store()
 init_dashboard_store()
 
+@app.route("/api/health", methods=["GET"])
+@app.route("/", methods=["GET"])
+def health_check():
+    """Health check endpoint - ใช้สำหรับ cron job เพื่อให้ instance ตื่นอยู่ (ไม่ sleep)"""
+    return jsonify({"status": "ok", "service": "IPO Readiness API"}), 200
+
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
     try:
