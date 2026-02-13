@@ -1,0 +1,13 @@
+# Render Blueprint – ต้องอยู่ที่ root ของ repo เพื่อให้ Render อ่านได้
+# ถ้า deploy จาก Dashboard เอง ต้องตั้ง Root Directory = backend และ Start Command ด้านล่าง
+services:
+  - type: web
+    name: ipo-readiness-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+    autoDeploy: true

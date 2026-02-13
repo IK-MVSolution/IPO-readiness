@@ -1,4 +1,5 @@
 import os
+import re
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ipo_readiness.services.parser_thai import parse_financial_files
@@ -28,17 +29,33 @@ from ipo_readiness.services.dashboard_service import (
 
 app = Flask(__name__)
 
-# CORS configuration for production
-CORS(app, origins=[
+# CORS: local + Vercel (regex) + FRONTEND_URL หรือ * ถ้าไม่ตั้ง
+_cors_origins = [
     "http://localhost:5173",
     "http://localhost:3000",
-    "https://*.vercel.app",  # Vercel preview deployments
-    os.environ.get("FRONTEND_URL", "*"),  # Production frontend URL
-])
+    re.compile(r"^https://[a-z0-9-]+\.vercel\.app$"),  # Vercel preview deployments
+]
+_frontend_url = (os.environ.get("FRONTEND_URL") or "").strip()
+if _frontend_url:
+    _cors_origins.append(_frontend_url)
+else:
+    _cors_origins.append("*")
+CORS(app, origins=_cors_origins)
 
-init_user_store()
-init_audit_store()
-init_dashboard_store()
+
+def _safe_init(name, fn):
+    """Run init function; log error and continue so app can at least serve /api/health."""
+    try:
+        fn()
+    except Exception as e:
+        import traceback
+        print(f"[WARN] {name} init failed: {e}")
+        traceback.print_exc()
+
+
+_safe_init("user_store", init_user_store)
+_safe_init("audit_store", init_audit_store)
+_safe_init("dashboard_store", init_dashboard_store)
 
 @app.route("/api/health", methods=["GET"])
 @app.route("/", methods=["GET"])
